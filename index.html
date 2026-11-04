@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>ระบบรายงานการเบิกใช้น้ำมัน - TPI Concrete</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * { font-family: 'Sarabun', sans-serif; box-sizing: border-box; }
+        body { background-color: #f8f9fa; color: #212529; overflow-x: hidden; }
+        
+        .paper-card {
+            background: #ffffff;
+            border-radius: 12px;
+            box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+            padding: 1rem;
+        }
+        @media (min-width: 576px) { .paper-card { padding: 2rem; } }
+
+        /* Custom Table Style สำหรับจอ Koder */
+        .table-custom th { 
+            background-color: #f1f5f9; 
+            text-align: center; 
+            vertical-align: middle; 
+            font-size: 0.8rem;
+            white-space: nowrap;
+        }
+        .table-custom td { padding: 0; vertical-align: middle; }
+        .table-custom input {
+            border: none; box-shadow: none !important; text-align: center;
+            border-radius: 0; background: transparent; font-size: 0.85rem; padding: 0.4rem 0.2rem;
+            width: 100%;
+        }
+        .table-custom input:focus { background-color: #eef2ff; }
+        input::-webkit-outer-spin-button, input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+        input[type=number] { -moz-appearance: textfield; }
+
+        /* แก้ปัญหาข้อความตกบรรทัดแนวตั้งบนมือถือ */
+        .summary-label {
+            white-space: nowrap;
+            font-size: 0.85rem;
+        }
+        .summary-input-group {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .chart-container { position: relative; width: 100%; max-width: 200px; margin: 0 auto; }
+        .toast-container { position: fixed; bottom: 20px; right: 20px; z-index: 9999; }
+        
+        @media print {
+            body { background: white; padding: 0; }
+            .no-print { display: none !important; }
+            .paper-card { box-shadow: none; padding: 0; border: none; }
+            .table-custom th, .table-custom td { border-color: #000 !important; }
+            .table-custom input { border: none !important; }
+        }
+    </style>
+</head>
+<body class="py-2 py-sm-4">
+
+<!-- Toast แจ้งเตือนบันทึก -->
+<div class="toast-container no-print">
+    <div id="saveToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+        <div class="d-flex">
+            <div class="toast-body small">
+                <i class="fa-solid fa-cloud-arrow-up me-1"></i>บันทึกข้อมูลเรียบร้อยแล้ว
+            </div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<div class="container-fluid px-2 px-sm-3" style="max-width: 900px;">
+
+    <!-- Toolbar ควบคุม -->
+    <div class="card border-0 shadow-sm mb-3 no-print">
+        <div class="card-body p-2 p-sm-3 d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+            <h6 class="card-title m-0 text-primary fw-bold">
+                <i class="fa-solid fa-gas-pump me-1"></i>ระบบรายงานการเบิกน้ำมัน
+            </h6>
+            <div class="d-flex gap-1 w-100 w-sm-auto justify-content-center flex-wrap">
+                <button class="btn btn-xs btn-sm btn-outline-info" onclick="openHistoryModal()">
+                    <i class="fa-solid fa-clock-rotate-left"></i> ประวัติ
+                </button>
+                <button class="btn btn-xs btn-sm btn-outline-primary" onclick="addRow()">
+                    <i class="fa-solid fa-plus"></i> เพิ่มแถว
+                </button>
+                <button class="btn btn-xs btn-sm btn-outline-danger" onclick="removeRow()">
+                    <i class="fa-solid fa-minus"></i> ลบแถว
+                </button>
+                <button class="btn btn-xs btn-sm btn-outline-secondary" onclick="resetForm()">
+                    <i class="fa-solid fa-rotate-left"></i> รีเซ็ต
+                </button>
+                <button class="btn btn-xs btn-sm btn-primary" onclick="window.print()">
+                    <i class="fa-solid fa-print"></i> พิมพ์
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- กระดาษรายงาน -->
+    <div class="paper-card">
+        <div class="text-end text-muted fw-bold small mb-1">OP-TR-06</div>
+
+        <div class="text-center mb-3">
+            <h5 class="fw-bold text-primary m-0">บริษัท ทีพีไอ คอนกรีต จำกัด</h5>
+            <h6 class="fw-semibold text-secondary m-0 fs-6">รายงานการเบิกใช้น้ำมัน <span class="fw-normal text-muted small">by pongston</span></h6>
+            <div class="text-muted small">หน่วยจ่าย แพล้นลาดบัวขาว สีคิ้ว โคราช</div>
+        </div>
+
+        <div class="d-flex justify-content-end align-items-center mb-3">
+            <label for="docDate" class="form-label me-2 m-0 fw-bold small"><i class="fa-regular fa-calendar-days me-1"></i>ประจำวันที่:</label>
+            <input type="date" class="form-control form-control-sm w-auto fw-bold text-primary" id="docDate" onchange="onDateChange()">
+        </div>
+
+        <datalist id="carTypes">
+            <option value="รถโม่">
+            <option value="KOSUMU21">
+        </datalist>
+
+        <!-- ตารางข้อมูล -->
+        <div class="table-responsive mb-3">
+            <table class="table table-bordered table-custom align-middle m-0" style="min-width: 600px;">
+                <thead>
+                    <tr>
+                        <th rowspan="2" style="width: 6%;">ลำดับ</th>
+                        <th colspan="2" style="width: 30%;">METER หัวจ่าย</th>
+                        <th rowspan="2" style="width: 14%;">TPI CODE</th>
+                        <th rowspan="2" style="width: 14%;">ประเภทรถ</th>
+                        <th rowspan="2" style="width: 12%;">ปริมาณจ่าย<br>( ลิตร )</th>
+                        <th rowspan="2" style="width: 12%;">เลขที่ใบเบิก</th>
+                        <th rowspan="2" style="width: 12%;">หมายเหตุ</th>
+                    </tr>
+                    <tr>
+                        <th style="width: 15%;">ก่อนจ่าย</th>
+                        <th style="width: 15%;">หลังจ่าย</th>
+                    </tr>
+                </thead>
+                <tbody id="tableBody"></tbody>
+            </table>
+        </div>
+
+        <!-- สรุปยอด + กราฟ จัด Layout รองรับหน้าจอมือถือ Koder -->
+        <div class="row g-3 align-items-center bg-light rounded p-2 p-sm-3 m-0 border mb-3">
+            <div class="col-12 col-md-7">
+                <div class="d-flex flex-column gap-2 mx-auto" style="max-width: 100%;">
+                    
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted summary-label">ยอดยกมาจากวันที่:</span>
+                        <div class="summary-input-group">
+                            <input type="text" id="prevDate" class="form-control form-control-sm text-center fw-bold p-1" style="width: 80px; font-size: 0.8rem;" value="21-ส.ค.-69" oninput="autoSave()">
+                            <span class="text-muted small summary-label">จำนวน</span>
+                            <input type="text" id="prevAmount" class="form-control form-control-sm text-end fw-bold p-1" style="width: 85px; font-size: 0.8rem;" value="18,820" oninput="autoSave()">
+                            <span class="text-muted small summary-label">ลิตร</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted summary-label">รับเข้า:</span>
+                        <div class="summary-input-group">
+                            <input type="text" id="incomeAmount" class="form-control form-control-sm text-end fw-bold p-1" style="width: 85px; font-size: 0.8rem;" value="0" oninput="autoSave()">
+                            <span class="text-muted small summary-label">ลิตร</span>
+                        </div>
+                    </div>
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted summary-label">(ลบ) รวมเบิกสุทธิ:</span>
+                        <div class="summary-input-group">
+                            <input type="text" class="form-control form-control-sm text-end fw-bold text-danger p-1" id="sumNetPaid" style="width: 85px; font-size: 0.8rem;" value="0" readonly>
+                            <span class="text-muted small summary-label">ลิตร</span>
+                        </div>
+                    </div>
+
+                    <hr class="my-1">
+
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="fw-bold text-primary summary-label">น้ำมันคงเหลือสุทธิ:</span>
+                        <div class="summary-input-group">
+                            <input type="text" id="remainAmount" class="form-control form-control-sm text-end fw-bold text-primary p-1 border-primary" style="width: 85px; font-size: 0.8rem;" value="18,137" oninput="autoSave()">
+                            <span class="text-muted small summary-label">ลิตร</span>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
+            <!-- กราฟโดนัท -->
+            <div class="col-12 col-md-5 text-center mt-3 mt-md-0">
+                <div class="fw-semibold small text-secondary mb-1">สัดส่วนคงเหลือ vs ใช้ไป</div>
+                <div class="chart-container">
+                    <canvas id="fuelDonutChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="row text-center mt-3 g-2">
+            <div class="col-6">
+                <div class="border border-secondary-subtle rounded p-2 bg-light">
+                    <span class="small text-muted">ผู้รายงาน: อลังการ</span>
+                </div>
+            </div>
+            <div class="col-6">
+                <div class="border border-secondary-subtle rounded p-3 bg-light">
+                    <span class="small text-muted">ผู้ตรวจสอบ: ........................</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal ประวัติย้อนหลัง -->
+<div class="modal fade" id="historyModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h6 class="modal-title fw-bold text-primary"><i class="fa-solid fa-clock-rotate-left me-1"></i>ประวัติรายงานย้อนหลัง</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-2">
+                <div class="table-responsive">
+                    <table class="table table-sm table-hover align-middle mb-0" style="font-size: 0.85rem;">
+                        <thead class="table-light">
+                            <tr>
+                                <th>ประจำวันที่</th>
+                                <th>รวมเบิก (ลิตร)</th>
+                                <th>คงเหลือ</th>
+                                <th class="text-end">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historyTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    let donutChart;
+    let saveTimeout;
+
+    document.addEventListener('DOMContentLoaded', () => {
+        initDonutChart();
+        const today = new Date().toISOString().split('T')[0];
+        document.getElementById('docDate').value = today;
+        loadSavedData(today);
+    });
+
+    const defaultData = [
+        { before: 522200, type: 'รถโม่', amount: 160, code: '02-1197', docNo: '36415', remark: '172307' },
+        { before: 522360, type: 'รถโม่', amount: 1, code: '02-1195', docNo: '36416', remark: '118239' }
+    ];
+
+    function addRow(data = null) {
+        const tbody = document.getElementById('tableBody');
+        const index = tbody.querySelectorAll('tr').length;
+
+        const valBefore = data ? data.before : '';
+        const valAmount = data ? data.amount : '';
+        const valType = data ? data.type : '';
+        const valCode = data ? data.code : '';
+        const valDocNo = data ? data.docNo : '';
+        const valRemark = data ? data.remark : '';
+
+        const calcAfter = (parseFloat(valBefore) || 0) + (parseFloat(valAmount) || 0);
+        const valAfter = (valBefore !== '' || valAmount !== '') ? calcAfter : '';
+
+        const newRow = document.createElement('tr');
+        newRow.innerHTML = `
+            <td class="text-center row-num bg-light fw-bold">${index + 1}</td>
+            <td><input type="number" class="input-before" value="${valBefore}" oninput="calculateRow(this)"></td>
+            <td><input type="number" class="input-after fw-bold text-primary" value="${valAfter}" readonly tabIndex="-1"></td>
+            <td><input type="text" value="${valCode}" oninput="autoSave()"></td>
+            <td><input type="text" list="carTypes" value="${valType}" placeholder="เลือก/พิมพ์" oninput="autoSave()"></td>
+            <td><input type="number" class="input-amount text-danger fw-semibold" value="${valAmount}" oninput="calculateRow(this)"></td>
+            <td><input type="text" value="${valDocNo}" oninput="autoSave()"></td>
+            <td><input type="text" value="${valRemark}" oninput="autoSave()"></td>
+        `;
+        
+        tbody.appendChild(newRow);
+        updateRowNumbers();
+        if(!data) autoSave();
+    }
+
+    function calculateRow(element) {
+        const tr = element.closest('tr');
+        const beforeInput = tr.querySelector('.input-before');
+        const amountInput = tr.querySelector('.input-amount');
+        const afterInput = tr.querySelector('.input-after');
+
+        const beforeVal = parseFloat(beforeInput.value) || 0;
+        const amountVal = parseFloat(amountInput.value) || 0;
+
+        if (beforeInput.value !== '' || amountInput.value !== '') {
+            afterInput.value = beforeVal + amountVal;
+        } else {
+            afterInput.value = '';
+        }
+
+        updateTotalSummary();
+        autoSave();
+    }
+
+    function updateTotalSummary() {
+        let totalAmount = 0;
+        document.querySelectorAll('.input-amount').forEach(input => {
+            totalAmount += parseFloat(input.value) || 0;
+        });
+
+        document.getElementById('sumNetPaid').value = totalAmount.toLocaleString();
+
+        if (donutChart) {
+            const remainVal = parseFloat((document.getElementById('remainAmount').value).replace(/,/g, '')) || 0;
+            donutChart.data.datasets[0].data = [totalAmount, remainVal];
+            donutChart.update();
+        }
+    }
+
+    function removeRow() {
+        const tbody = document.getElementById('tableBody');
+        const rows = tbody.querySelectorAll('tr');
+        if (rows.length > 1) {
+            tbody.removeChild(rows[rows.length - 1]);
+            updateRowNumbers();
+            updateTotalSummary();
+            autoSave();
+        }
+    }
+
+    function updateRowNumbers() {
+        document.querySelectorAll('#tableBody tr').forEach((row, index) => {
+            row.querySelector('.row-num').textContent = index + 1;
+        });
+    }
+
+    function onDateChange() {
+        const selectedDate = document.getElementById('docDate').value;
+        loadSavedData(selectedDate);
+    }
+
+    function getHistory() {
+        return JSON.parse(localStorage.getItem('tpi_fuel_history') || '{}');
+    }
+
+    function autoSave() {
+        clearTimeout(saveTimeout);
+        saveTimeout = setTimeout(() => {
+            const docDate = document.getElementById('docDate').value;
+            if(!docDate) return;
+
+            const rowData = [];
+            document.querySelectorAll('#tableBody tr').forEach(row => {
+                const inputs = row.querySelectorAll('input');
+                rowData.push({
+                    before: inputs[0].value,
+                    type: inputs[3].value,
+                    amount: inputs[4].value,
+                    code: inputs[2].value,
+                    docNo: inputs[5].value,
+                    remark: inputs[6].value
+                });
+            });
+
+            const formData = {
+                docDate: docDate,
+                prevDate: document.getElementById('prevDate').value,
+                prevAmount: document.getElementById('prevAmount').value,
+                incomeAmount: document.getElementById('incomeAmount').value,
+                remainAmount: document.getElementById('remainAmount').value,
+                sumNetPaid: document.getElementById('sumNetPaid').value,
+                rows: rowData
+            };
+
+            const history = getHistory();
+            history[docDate] = formData;
+            localStorage.setItem('tpi_fuel_history', JSON.stringify(history));
+            showToast();
+        }, 500);
+    }
+
+    function loadSavedData(dateStr) {
+        const history = getHistory();
+        const formData = history[dateStr];
+        document.getElementById('tableBody').innerHTML = '';
+
+        if (formData) {
+            document.getElementById('prevDate').value = formData.prevDate || '21-ส.ค.-69';
+            document.getElementById('prevAmount').value = formData.prevAmount || '18,820';
+            document.getElementById('incomeAmount').value = formData.incomeAmount || '0';
+            document.getElementById('remainAmount').value = formData.remainAmount || '18,137';
+            formData.rows.forEach(data => addRow(data));
+        } else {
+            document.getElementById('prevDate').value = '21-ส.ค.-69';
+            document.getElementById('prevAmount').value = '18,820';
+            document.getElementById('incomeAmount').value = '0';
+            document.getElementById('remainAmount').value = '18,137';
+            for (let i = 0; i < 3; i++) {
+                addRow(i < defaultData.length ? defaultData[i] : null);
+            }
+        }
+        updateTotalSummary();
+    }
+
+    function openHistoryModal() {
+        const history = getHistory();
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = '';
+
+        const dates = Object.keys(history).sort().reverse();
+        if (dates.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" class="text-center text-muted">ไม่มีประวัติย้อนหลัง</td></tr>';
+        } else {
+            dates.forEach(date => {
+                const item = history[date];
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="fw-bold text-primary">${item.docDate}</td>
+                    <td class="text-danger fw-semibold">${item.sumNetPaid || 0}</td>
+                    <td>${item.remainAmount || 0}</td>
+                    <td class="text-end">
+                        <button class="btn btn-xs btn-sm btn-primary py-0 px-2" onclick="selectHistory('${item.docDate}')">เปิด</button>
+                        <button class="btn btn-xs btn-sm btn-outline-danger py-0 px-2" onclick="deleteHistory('${item.docDate}')"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+        new bootstrap.Modal(document.getElementById('historyModal')).show();
+    }
+
+    function selectHistory(dateStr) {
+        document.getElementById('docDate').value = dateStr;
+        loadSavedData(dateStr);
+        bootstrap.Modal.getInstance(document.getElementById('historyModal')).hide();
+    }
+
+    function deleteHistory(dateStr) {
+        if (confirm(`ลบประวัติวันที่ ${dateStr}?`)) {
+            const history = getHistory();
+            delete history[dateStr];
+            localStorage.setItem('tpi_fuel_history', JSON.stringify(history));
+            openHistoryModal();
+        }
+    }
+
+    function resetForm() {
+        if (confirm('ล้างข้อมูลหน้าจอสำหรับวันนี้ใช่หรือไม่?')) {
+            document.getElementById('tableBody').innerHTML = '';
+            for (let i = 0; i < 3; i++) addRow(null);
+            updateTotalSummary();
+            autoSave();
+        }
+    }
+
+    function showToast() {
+        const toastEl = document.getElementById('saveToast');
+        const toast = new bootstrap.Toast(toastEl, { delay: 1000 });
+        toast.show();
+    }
+
+    function initDonutChart() {
+        const ctx = document.getElementById('fuelDonutChart').getContext('2d');
+        donutChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: ['เบิกใช้วันนี้', 'คงเหลือ'],
+                datasets: [{
+                    data: [161, 18137],
+                    backgroundColor: ['#dc3545', '#0d6efd'],
+                    borderWidth: 2
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                        labels: { font: { family: 'Sarabun', size: 10 }, boxWidth: 10 }
+                    }
+                },
+                cutout: '65%'
+            }
+        });
+    }
+</script>
+
+</body>
+</html>
